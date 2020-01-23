@@ -16,29 +16,43 @@ fn rx(b: &mut dyn UnitaryBuilder, r: Register, theta: f64) -> Result<Register, C
 fn spin_energy(angles: Vec<f64>, j: i64, h: i64, iterations: u64) -> f64 {
     let mut sum: i64 = 0;
     let nqubits = angles.len();
-    let mut s = vec![0, nqubits];
 
-    for iter in 1..iterations {
+    for iter in 1..=iterations {
         let mut b = OpBuilder::new();
-        let qr = b.register(nqubits as u64).unwrap();
 
-        let qr = rx(&mut b, qr, angle).unwrap();
-        let (qr, qr_m) =  b.measure(qr);
-        let (_, result) = run_local::<f64>(&qr).unwrap();
-        let (m, _) = result.get_measurement(&qr_m).unwrap();
-
-        for x in s.iter_mut() {
-
+        let mut qrs = Vec::new();
+        let mut qr_ms = Vec::new();
+        for angle in &angles {
+            let qr = b.qubit();
+            let qr = rx(&mut b, qr, *angle).unwrap();
+            let (qr, qr_m) = b.measure(qr);
+            qrs.push(qr);
+            qr_ms.push(qr_m);
         }
 
-        let spin: i64 = 2 * (m as i64) - 1;
-        sum = sum + spin;
+        let mr = b.merge(qrs).unwrap();
+
+        let (_, result) = run_local::<f64>(&mr).unwrap();
+
+        let mut s = Vec::new();
+        for qr_m in &qr_ms {
+            let (m, _) = result.get_measurement(qr_m).unwrap();
+            s.push( 2 * (m as i64) - 1) ;
+        }
+
+        for i in 0..=nqubits-2 {
+            sum = sum - j * *s.get(i).unwrap() * *s.get(i+1).unwrap();
+        }
+
+        for i in 0..=nqubits-1 {
+            sum = sum - h * *s.get(i).unwrap();
+        }
     }
     (sum as f64) / (iterations as f64)
 }
 
 fn main() {
     let parameter = vec![0.0, 0.0, 0.0];
-    let result = spin_energy(parameter, 0, 0, 1000);
-    println!("Average spin {}", result)
+    let result = spin_energy(parameter, 1, 2, 1000);
+    println!("Average energy {}", result)
 }
